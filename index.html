@@ -663,7 +663,22 @@ async function refreshDashboard() {
     if (!resp.ok) throw new Error('No se pudo leer el índice (' + resp.status + ')');
     var text = await resp.text();
     var json = JSON.parse(text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/)[1]);
-    var rows = (json.table.rows || []).map(function(r) { return { fecha: r.c[0] && r.c[0].v ? String(r.c[0].v) : '', url: r.c[1] && r.c[1].v ? String(r.c[1].v) : '' }; }).filter(function(r) { return r.fecha && r.url && r.url.indexOf('docs.google.com') >= 0; });
+    var rows = (json.table.rows || []).map(function(r) {
+    var rawFecha = r.c[0] && r.c[0].v ? r.c[0].v : '';
+    var fechaStr = '';
+    // gviz returns dates as "Date(year,month0indexed,day)" - month is 0-based!
+    var dateMatch = String(rawFecha).match(/Date\((\d+),(\d+),(\d+)\)/);
+    if (dateMatch) {
+      var yr = dateMatch[1];
+      var mo = String(parseInt(dateMatch[2]) + 1).padStart(2,'0'); // Fix: +1 for 0-indexed month
+      var dy = String(parseInt(dateMatch[3])).padStart(2,'0');
+      fechaStr = yr + mo + dy;
+    } else {
+      // Plain string like "20260519" or "2026-05-19"
+      fechaStr = String(rawFecha).replace(/\D/g,'').slice(0,8);
+    }
+    return { fecha: fechaStr, url: r.c[1] && r.c[1].v ? String(r.c[1].v) : '' };
+  }).filter(function(r) { return r.fecha && r.fecha.length === 8 && r.url && r.url.indexOf('docs.google.com') >= 0; });
     if (!rows.length) throw new Error('Índice vacío');
     setStatus('Descargando ' + rows.length + ' semana(s)...', 'loading');
     var loaded = 0;
